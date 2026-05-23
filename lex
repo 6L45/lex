@@ -16,6 +16,12 @@
 #     full                 Réindexe toute la base (écrase l'existant)
 #     --provider <p>       openai | sentence-transformers | cohere
 #                          (défaut: LEX_EMBEDDING_PROVIDER dans .env)
+#   select [options]       Sélectionne via LLM les articles insolites/utiles
+#     --provider <p>       anthropic | openai (défaut: LEX_LLM_PROVIDER)
+#     --sample <n>         Taille du pool tiré au hasard (défaut: config.py)
+#     --count  <n>         Nb d'articles par catégorie (défaut: config.py)
+#     --output <path>      Fichier de sortie append-only (défaut: out/selected.txt)
+#     --dry-run            Affiche la sélection sans écrire DB ni fichier
 #   status                 Etat du container et stats de la BDD
 #   help                   Affiche cette aide
 # END_HELP
@@ -287,6 +293,12 @@ cmd_embed() {
   "${LEX_PYTHON_CMD}" "${ROOT_DIR}/scripts/embed.py" "${args[@]+"${args[@]}"}"
 }
 
+cmd_select() {
+  ensure_deps
+  echo "Selection d'articles via LLM..."
+  "${LEX_PYTHON_CMD}" "${ROOT_DIR}/scripts/select_articles.py" "$@"
+}
+
 cmd_status() {
   echo "=== Container ==="
   if container_exists; then
@@ -306,6 +318,8 @@ cmd_status() {
       COUNT(embedding)                                 AS avec_embedding,
       COUNT(*) - COUNT(embedding)                      AS sans_embedding,
       COUNT(DISTINCT code_juridique)                   AS nb_codes,
+      COUNT(*) FILTER (WHERE selected)                 AS selected,
+      COUNT(*) FILTER (WHERE done)                     AS done,
       MAX(last_sync_date)::date                        AS dernier_sync
     FROM legal_articles;
   "
@@ -332,6 +346,7 @@ case "${COMMAND}" in
   sync)   cmd_sync   "$@" ;;
   pull)   cmd_pull   "$@" ;;
   embed)  cmd_embed  "$@" ;;
+  select) cmd_select "$@" ;;
   status) cmd_status "$@" ;;
   help|--help|-h) cmd_help ;;
   *)
